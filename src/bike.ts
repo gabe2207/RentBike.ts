@@ -10,9 +10,8 @@ export class Bike {
         public description: string,
         public ratings: number,
         public imageUrls: string[],
-        public id: string,
-        public costPerHour: number,
+        public available: boolean = true,
         public position: Location = new Location(0.0, 0.0),
-        public rented: boolean = false  //false = disponivel, true = alugada
+        public id?: string
     ) {}
 }
