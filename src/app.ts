@@ -1,5 +1,12 @@
 import { Bike } from "./bike";
 import { Crypt } from "./crypt";
+import { AlreadyRegisterBike } from "./erros/AlreadyRegisterBike";
+import { AlreadyRegisterUser } from "./erros/AlreadyRegisterUser";
+import { RentnotFound } from "./erros/RentnotFound";
+import { UnavailableBike } from "./erros/UnavailableBike";
+import { UnregisteredBike } from "./erros/UnregisteredBike";
+import { UserDoesNotExist } from "./erros/UserDoesNotExist";
+import { UserNotFound } from "./erros/UserNotFound";
 import { Location } from "./location";
 import { Rent } from "./rent";
 import { User } from "./user";
@@ -15,10 +22,10 @@ export class App {
         return this.users.find(user => user.email === email)
     }
 
-    async registerUser(user: User): Promise<string> {
+    async registerUser(user: User): Promise<string> { //Test Done
         for (const rUser of this.users) {
             if (rUser.email === user.email) {
-                throw new Error('Duplicate user.')
+                throw new AlreadyRegisterUser()
             }
         }
         const newId = crypto.randomUUID()
@@ -29,53 +36,56 @@ export class App {
         return newId
     }
 
-    async authenticate(userEmail: string, password: string): Promise<boolean> {
+    async authenticate(userEmail: string, password: string): Promise<boolean> {  
         const user = this.findUser(userEmail)
-        if (!user) throw new Error('User not found.')
+        if (!user) throw new UserNotFound()
         return await this.crypt.compare(password, user.password)
     }
 
-    registerBike(bike: Bike): string {
+    registerBike(bike: Bike): string { //Test Done
+        const iBike = this.bikes.find(Ib => Ib === bike)
+        if(iBike) throw new AlreadyRegisterBike()
         const newId = crypto.randomUUID()
         bike.id = newId
         this.bikes.push(bike)
         return newId
+    
     }
 
-    removeUser(email: string): void {
+    removeUser(email: string): void { //Test Done
         const userIndex = this.users.findIndex(user => user.email === email)
         if (userIndex !== -1) {
             this.users.splice(userIndex, 1)
             return
         }
-        throw new Error('User does not exist.')
+        throw new UserDoesNotExist()
     }
     
-    rentBike(bikeId: string, userEmail: string): void {
+    rentBike(bikeId: string | undefined, userEmail: string): void { //Test Done
         const bike = this.bikes.find(bike => bike.id === bikeId)
         if (!bike) {
-            throw new Error('Bike not found.')
+            throw new UnregisteredBike()
         }
         if (!bike.available) {
-            throw new Error('Unavailable bike.')
+            throw new UnavailableBike()
         }
         const user = this.findUser(userEmail)
         if (!user) {
-            throw new Error('User not found.')
+            throw new UserDoesNotExist()
         }
         bike.available = false
         const newRent = new Rent(bike, user, new Date())
         this.rents.push(newRent)
     }
 
-    returnBike(bikeId: string, userEmail: string): number {
+    returnBike(bikeId: string | undefined, userEmail: string): number {  //test done
         const now = new Date()
         const rent = this.rents.find(rent =>
             rent.bike.id === bikeId &&
             rent.user.email === userEmail &&
             !rent.end
         )
-        if (!rent) throw new Error('Rent not found.')
+        if (!rent) throw new RentnotFound()
         rent.end = now
         rent.bike.available = true
         const hours = diffHours(rent.end, rent.start)
@@ -94,9 +104,9 @@ export class App {
         return this.rents
     }
 
-    moveBikeTo(bikeId: string, location: Location): void {
+    moveBikeTo(bikeId: string | undefined, location: Location): void { //test done
         const bike = this.bikes.find(bike => bike.id === bikeId)
-        if(!bike) throw new Error('Bike não cadastrada!')
+        if(!bike) throw new UnregisteredBike()
         bike.position.latitude = location.latitude
         bike.position.longitude = location.longitude
     }
