@@ -8,113 +8,109 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.App = void 0;
 const crypt_1 = require("./crypt");
-const AlreadyRegisterBike_1 = require("./erros/AlreadyRegisterBike");
-const AlreadyRegisterUser_1 = require("./erros/AlreadyRegisterUser");
-const RentnotFound_1 = require("./erros/RentnotFound");
-const UnavailableBike_1 = require("./erros/UnavailableBike");
-const UnregisteredBike_1 = require("./erros/UnregisteredBike");
-const UserDoesNotExist_1 = require("./erros/UserDoesNotExist");
 const rent_1 = require("./rent");
-const crypto_1 = __importDefault(require("crypto"));
+const bike_not_found_error_1 = require("./errors/bike-not-found-error");
+const unavailable_bike_error_1 = require("./errors/unavailable-bike-error");
+const user_not_found_error_1 = require("./errors/user-not-found-error");
+const duplicate_user_error_1 = require("./errors/duplicate-user-error");
+const rent_not_found_1 = require("./errors/rent-not-found");
 class App {
-    constructor() {
-        this.users = [];
-        this.bikes = [];
-        this.rents = [];
+    constructor(userRepo, bikeRepo, rentRepo) {
+        this.userRepo = userRepo;
+        this.bikeRepo = bikeRepo;
+        this.rentRepo = rentRepo;
         this.crypt = new crypt_1.Crypt();
     }
     findUser(email) {
-        return this.users.find(user => user.email === email);
+        return __awaiter(this, void 0, void 0, function* () {
+            const user = yield this.userRepo.find(email);
+            if (!user)
+                throw new user_not_found_error_1.UserNotFoundError();
+            return user;
+        });
     }
     registerUser(user) {
         return __awaiter(this, void 0, void 0, function* () {
-            for (const rUser of this.users) {
-                if (rUser.email === user.email) {
-                    throw new AlreadyRegisterUser_1.AlreadyRegisterUser();
-                }
+            if (yield this.userRepo.find(user.email)) {
+                throw new duplicate_user_error_1.DuplicateUserError();
             }
-            const newId = crypto_1.default.randomUUID();
-            user.id = newId;
             const encryptedPassword = yield this.crypt.encrypt(user.password);
             user.password = encryptedPassword;
-            this.users.push(user);
-            return newId;
+            return yield this.userRepo.add(user);
         });
     }
     authenticate(userEmail, password) {
         return __awaiter(this, void 0, void 0, function* () {
-            const user = this.findUser(userEmail);
-            if (!user)
-                throw new Error('User not found.');
+            const user = yield this.findUser(userEmail);
             return yield this.crypt.compare(password, user.password);
         });
     }
     registerBike(bike) {
-        const iBike = this.bikes.find(Ib => Ib === bike);
-        if (iBike)
-            throw new AlreadyRegisterBike_1.AlreadyRegisterBike();
-        const newId = crypto_1.default.randomUUID();
-        bike.id = newId;
-        this.bikes.push(bike);
-        return newId;
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield this.bikeRepo.add(bike);
+        });
     }
     removeUser(email) {
-        const userIndex = this.users.findIndex(user => user.email === email);
-        if (userIndex !== -1) {
-            this.users.splice(userIndex, 1);
-            return;
-        }
-        throw new UserDoesNotExist_1.UserDoesNotExist();
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.findUser(email);
+            yield this.userRepo.remove(email);
+        });
     }
     rentBike(bikeId, userEmail) {
-        const bike = this.bikes.find(bike => bike.id === bikeId);
-        if (!bike) {
-            throw new UnregisteredBike_1.UnregisteredBike();
-        }
-        if (!bike.available) {
-            throw new UnavailableBike_1.UnavailableBike();
-        }
-        const user = this.findUser(userEmail);
-        if (!user) {
-            throw new UserDoesNotExist_1.UserDoesNotExist();
-        }
-        bike.available = false;
-        const newRent = new rent_1.Rent(bike, user, new Date());
-        this.rents.push(newRent);
+        return __awaiter(this, void 0, void 0, function* () {
+            const bike = yield this.findBike(bikeId);
+            if (!bike.available) {
+                throw new unavailable_bike_error_1.UnavailableBikeError();
+            }
+            const user = yield this.findUser(userEmail);
+            bike.available = false;
+            yield this.bikeRepo.update(bikeId, bike);
+            const newRent = new rent_1.Rent(bike, user, new Date());
+            return yield this.rentRepo.add(newRent);
+        });
     }
     returnBike(bikeId, userEmail) {
-        const now = new Date();
-        const rent = this.rents.find(rent => rent.bike.id === bikeId &&
-            rent.user.email === userEmail &&
-            !rent.end);
-        if (!rent)
-            throw new RentnotFound_1.RentnotFound();
-        rent.end = now;
-        rent.bike.available = true;
-        const hours = diffHours(rent.end, rent.start);
-        return hours * rent.bike.rate;
+        return __awaiter(this, void 0, void 0, function* () {
+            const now = new Date();
+            const rent = yield this.rentRepo.findOpen(bikeId, userEmail);
+            if (!rent)
+                throw new rent_not_found_1.RentNotFoundError();
+            rent.end = now;
+            yield this.rentRepo.update(rent.id, rent);
+            rent.bike.available = true;
+            yield this.bikeRepo.update(rent.bike.id, rent.bike);
+            const hours = diffHours(rent.end, rent.start);
+            return hours * rent.bike.rate;
+        });
     }
     listUsers() {
-        return this.users;
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield this.userRepo.list();
+        });
     }
     listBikes() {
-        return this.bikes;
-    }
-    listRents() {
-        return this.rents;
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield this.bikeRepo.list();
+        });
     }
     moveBikeTo(bikeId, location) {
-        const bike = this.bikes.find(bike => bike.id === bikeId);
-        if (!bike)
-            throw new UnregisteredBike_1.UnregisteredBike();
-        bike.position.latitude = location.latitude;
-        bike.position.longitude = location.longitude;
+        return __awaiter(this, void 0, void 0, function* () {
+            const bike = yield this.findBike(bikeId);
+            bike.location.latitude = location.latitude;
+            bike.location.longitude = location.longitude;
+            yield this.bikeRepo.update(bikeId, bike);
+        });
+    }
+    findBike(bikeId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const bike = yield this.bikeRepo.find(bikeId);
+            if (!bike)
+                throw new bike_not_found_error_1.BikeNotFoundError();
+            return bike;
+        });
     }
 }
 exports.App = App;
