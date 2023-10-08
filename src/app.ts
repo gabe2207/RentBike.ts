@@ -11,6 +11,7 @@ import { RentRepo } from "./ports/rent-repo";
 import { UserRepo } from "./ports/user-repo";
 import { BikeRepo } from "./ports/bike-repo";
 import { RentNotFoundError } from "./errors/rent-not-found";
+import { RemoveUserRentError } from "./errors/remove-user-rent-error";
 
 export class App {
     crypt: Crypt = new Crypt()
@@ -45,22 +46,37 @@ export class App {
         return await this.bikeRepo.add(bike)
     }
 
-    async removeUser(email: string): Promise<void> {
-        await this.findUser(email)
-        await this.userRepo.remove(email)
+    async removeUser(email: string) { 
+        const openRents = await this.rentRepo.findOpenRentsFor(email); 
+        if (openRents && openRents.length > 0) {
+            throw new RemoveUserRentError();
+        }
+    
+        const user = await this.userRepo.find(email);
+        if (!user) {
+            throw new UserNotFoundError();
+        }
+        await this.userRepo.remove(email);
     }
     
+    
+    
     async rentBike(bikeId: string, userEmail: string): Promise<string> {
-        const bike = await this.findBike(bikeId)
+        const bike = await this.findBike(bikeId);
         if (!bike.available) {
-            throw new UnavailableBikeError()
+            throw new UnavailableBikeError();
         }
-        const user = await this.findUser(userEmail)
-        bike.available = false
-        await this.bikeRepo.update(bikeId, bike)
-        const newRent = new Rent(bike, user, new Date())
-        return await this.rentRepo.add(newRent)
+        const user = await this.findUser(userEmail);
+        bike.available = false;
+        await this.bikeRepo.update(bikeId, bike);
+        
+        const newRent = new Rent(bike, user, new Date(), user.email);
+        
+        const rentId = await this.rentRepo.add(newRent);
+        
+        return rentId;
     }
+    
 
     async returnBike(bikeId: string, userEmail: string): Promise<number> {
         const now = new Date()

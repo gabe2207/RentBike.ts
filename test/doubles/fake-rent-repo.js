@@ -8,22 +8,19 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FakeRentRepo = void 0;
-const crypto_1 = __importDefault(require("crypto"));
 class FakeRentRepo {
     constructor() {
         this.rents = [];
     }
     add(rent) {
         return __awaiter(this, void 0, void 0, function* () {
-            const newId = crypto_1.default.randomUUID();
-            rent.id = newId;
+            const id = Math.random().toString(36).substring(2, 15); // Gera um ID aleatório
+            rent.id = id;
             this.rents.push(rent);
-            return newId;
+            console.log('Rent added to repo:', rent); // Log para verificação
+            return id;
         });
     }
     findOpen(bikeId, userEmail) {
@@ -38,6 +35,12 @@ class FakeRentRepo {
             const rentIndex = this.rents.findIndex(rent => rent.id === id);
             if (rentIndex !== -1)
                 this.rents[rentIndex] = rent;
+        });
+    }
+    findOpenRentsFor(email) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const openRents = this.rents.filter(rent => rent.email === email && !rent.end);
+            return openRents;
         });
     }
 }
