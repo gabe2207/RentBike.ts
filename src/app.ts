@@ -10,8 +10,7 @@ import { DuplicateUserError } from "./errors/duplicate-user-error";
 import { RentRepo } from "./ports/rent-repo";
 import { UserRepo } from "./ports/user-repo";
 import { BikeRepo } from "./ports/bike-repo";
-import { RentNotFoundError } from "./errors/rent-not-found";
-import { RemoveUserRentError } from "./errors/remove-user-rent-error";
+import { UserHasOpenRentError } from "./errors/user-has-open-rent-error";
 
 export class App {
     crypt: Crypt = new Crypt()
@@ -46,47 +45,32 @@ export class App {
         return await this.bikeRepo.add(bike)
     }
 
-    async removeUser(email: string) { 
-        const openRents = await this.rentRepo.findOpenRentsFor(email); 
-        if (openRents && openRents.length > 0) {
-            throw new RemoveUserRentError();
+    async removeUser(email: string): Promise<void> {
+        await this.findUser(email)
+        if ((await this.rentRepo.findOpenFor(email)).length > 0) {
+            throw new UserHasOpenRentError()
         }
-    
-        const user = await this.userRepo.find(email);
-        if (!user) {
-            throw new UserNotFoundError();
-        }
-        await this.userRepo.remove(email);
+        await this.userRepo.remove(email)
     }
-    
-    
     
     async rentBike(bikeId: string, userEmail: string): Promise<string> {
-        const bike = await this.findBike(bikeId);
+        const bike = await this.findBike(bikeId)
         if (!bike.available) {
-            throw new UnavailableBikeError();
+            throw new UnavailableBikeError()
         }
-        const user = await this.findUser(userEmail);
-        bike.available = false;
-        await this.bikeRepo.update(bikeId, bike);
-        
-        const newRent = new Rent(bike, user, new Date(), user.email);
-        
-        const rentId = await this.rentRepo.add(newRent);
-        
-        return rentId;
+        const user = await this.findUser(userEmail)
+        await this.bikeRepo.updateAvailability(bikeId, false)
+        const newRent = new Rent(bike, user, new Date())
+        return await this.rentRepo.add(newRent)
     }
-    
 
     async returnBike(bikeId: string, userEmail: string): Promise<number> {
         const now = new Date()
         const rent = await this.rentRepo.findOpen(bikeId, userEmail)
-        if (!rent) throw new RentNotFoundError()
-        rent.end = now
-        await this.rentRepo.update(rent.id, rent)
-        rent.bike.available = true
-        await this.bikeRepo.update(rent.bike.id, rent.bike)
-        const hours = diffHours(rent.end, rent.start)
+        if (!rent) throw new Error('Rent not found.')
+        await this.rentRepo.updateEnd(rent.id, now)
+        await this.bikeRepo.updateAvailability(bikeId, true)
+        const hours = diffHours(now, rent.start)
         return hours * rent.bike.rate
     }
 
@@ -99,10 +83,8 @@ export class App {
     }
 
     async moveBikeTo(bikeId: string, location: Location) {
-        const bike = await this.findBike(bikeId)
-        bike.location.latitude = location.latitude
-        bike.location.longitude = location.longitude
-        await this.bikeRepo.update(bikeId, bike)
+        await this.findBike(bikeId)
+        await this.bikeRepo.updateLocation(bikeId, location.latitude, location.longitude)
     }
 
     async findBike(bikeId: string): Promise<Bike> {
